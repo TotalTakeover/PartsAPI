@@ -8,7 +8,7 @@
 --         \ \__\ \ \_______\   \ \__\ \ \__\ \__\ \_______\
 --          \|__|  \|_______|    \|__|  \|__|\|__|\|_______|
 --
--- Version: 1.1.0
+-- Version: 1.1.1
 
 -- An API for handling the creation of Parts Objects.
 ---@class PartsAPI
@@ -116,6 +116,44 @@ function partsObject:createTable(condition)
 	
 	-- Return table
 	return tbl
+	
+end
+
+-- Creates a deep copy of a provided modelpart, and adds it's contents to its Parts Object.
+---@param part ModelPart #
+-- The modelpart the deep copy is based on.
+function partsObject:deepCopy(part)
+	
+	-- Start by creating a copy of part
+	local copy = part:copy(part:getName().."_Copy")
+	
+	-- Add new part to parts table
+	table.insert(self.parts, copy)
+	
+	-- Check if part is a group
+	if copy:getType() == "GROUP" then
+		
+		-- Add group to outliner
+		self.outliner[copy:getName()] = copy
+		
+		-- Find parts children
+		local children = copy:getChildren()
+		
+		-- Loop through children if applicable
+		for i = 1, #children do
+			
+			-- Child part
+			local child = children[i]
+			
+			-- Remove from parent, send to copy
+			copy:removeChild(child):addChild(self:deepCopy(child))
+		
+		end
+		
+	end
+	
+	-- Returns copy of modelpart
+	return copy
 	
 end
 

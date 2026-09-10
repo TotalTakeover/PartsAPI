@@ -8,7 +8,7 @@
 --         \ \__\ \ \_______\   \ \__\ \ \__\ \__\ \_______\
 --          \|__|  \|_______|    \|__|  \|__|\|__|\|_______|
 --
--- Version: 1.1.1
+-- Version: 1.1.2
 
 -- An API for handling the creation of Parts Objects.
 ---@class PartsAPI
@@ -97,7 +97,7 @@ function partsAPI.new(model)
 end
 
 -- Creates a table of model parts that match a condition.
----@param condition function #
+---@param condition fun(part: ModelPart): any #
 -- The function modelparts will be compared against.
 ---@nodiscard
 function partsObject:createTable(condition)

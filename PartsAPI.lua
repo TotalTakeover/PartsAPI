@@ -8,7 +8,8 @@
 --         \ \__\ \ \_______\   \ \__\ \ \__\ \__\ \_______\
 --          \|__|  \|_______|    \|__|  \|__|\|__|\|_______|
 --
--- Version: 1.1.2
+-- Special thanks: Grandpa Scout & Auria
+-- Version: 1.2.0
 
 -- An API for handling the creation of Parts Objects.
 ---@class PartsAPI
@@ -34,6 +35,51 @@ local partsMeta = {
 	__type = "PartsObject"
 }
 
+-- Modelpart API's metatable index
+local partIndex = figuraMetatables.ModelPart.__index
+
+-- The metatable for groups of modelparts.
+local groupMeta = {
+	---@param obj ModelPart[]
+	---@param fieldStr string
+	__index = function(obj, fieldStr)
+		
+		-- Get the first modelpart
+		local first = obj[1]
+		
+		-- Get method from modelpart API
+		local method = partIndex(first, fieldStr)
+		
+		-- Return field early if not a function
+		if type(method) ~= "function" then return method end
+		
+		-- Preform functions on modelparts
+		---@return any ...
+		return function(_, ...)
+			
+			-- Preform method on first modelpart, and get results as table
+			local results = table.pack(method(first, ...))
+			
+			-- If the first result was the first modelpart, return object table
+			if results[1] == first then
+				results[1] = obj
+			end
+			
+			-- Preform method on the rest of the modelparts
+			for i = 2, #obj do
+				method(obj[i], ...)
+			end
+			
+			-- Return results
+			return table.unpack(results)
+			
+		end
+		
+	end,
+	-- Pretend to be a modelpart so other libraries that typecheck get tricked :P
+	__type = "ModelPart"
+}
+
 -- Creates a table used for a parts object.
 ---@param part ModelPart #
 -- The root model part.  
@@ -50,7 +96,8 @@ local function objSetup(part, tbl)
 	}
 	
 	-- Insert part into parts table
-	table.insert(tbl.parts, part)
+	local parts = tbl.parts
+	parts[#parts + 1] = part
 	
 	-- Check if part is a group
 	if part:getType() == "GROUP" then
@@ -96,11 +143,13 @@ function partsAPI.new(model)
 	
 end
 
--- Creates a table of model parts that match a condition.
+-- Creates a table of model parts that match a condition.  
+-- This table acts like a singular modelpart, and can have methods preformed on it.
 ---@param condition fun(part: ModelPart): any #
 -- The function modelparts will be compared against.
+---@return ModelPart
 ---@nodiscard
-function partsObject:createTable(condition)
+function partsObject:createGroup(condition)
 	
 	-- The parts that match the condition
 	---@type ModelPart[]
@@ -111,8 +160,70 @@ function partsObject:createTable(condition)
 	
 	-- Loop through each part checking if the condition matches
 	for i = 1, #parts do
-		if condition(parts[i]) then table.insert(tbl, parts[i]) end
+		if condition(parts[i]) then tbl[#tbl + 1] = parts[i] end
 	end
+	
+	-- Establish group metatable
+	setmetatable(
+		tbl,
+		groupMeta
+	)
+	
+	-- Return table
+	return tbl
+	
+end
+
+-- Creates a chain of modelparts based on a modelparts name.  
+-- This function will search a part object's outliner for similar names with numbers, counting upwards.  
+-- This table acts like a singular modelpart, and can have methods preformed on it.
+---@param part ModelPart #
+-- The root modelpart of the chain. It's assumed index is 1, optionally.  
+-- Starting with any number other than 1 will assume the number after it.
+---@param length? integer #
+-- How many entries will be made into the table.  
+-- If left blank, the function will add model parts until the chain is broken.
+---@return ModelPart
+---@nodiscard
+function partsObject:createChain(part, length)
+	
+	-- The parts that match the modelpart root
+	---@type ModelPart[]
+	local tbl = {}
+	
+	-- If no length, use parts table instead
+	length = length or #self.parts
+	
+	-- Insert root modelpart into table
+	tbl[#tbl + 1] = part
+	
+	-- Part name, string, and initial index
+	local name = part:getName()
+	local nameStr = name:gsub("%d+$", "")
+	local initIndex = name:match("%d+$") or 1
+	
+	-- Search for modelparts using name
+	for i = 2, length do
+		
+		-- Create names
+		local currIndex = initIndex + i - 1
+		local currName = nameStr..currIndex
+		local currPart = self.outliner[currName]
+		
+		-- Store part in table, otherwise kill loop
+		if currPart then
+			tbl[#tbl + 1] = currPart
+		else
+			break
+		end
+		
+	end
+	
+	-- Establish group metatable
+	setmetatable(
+		tbl,
+		groupMeta
+	)
 	
 	-- Return table
 	return tbl
@@ -128,7 +239,8 @@ function partsObject:deepCopy(part)
 	local copy = part:copy(part:getName().."_Copy")
 	
 	-- Add new part to parts table
-	table.insert(self.parts, copy)
+	local parts = self.parts
+	parts[#parts + 1] = copy
 	
 	-- Check if part is a group
 	if copy:getType() == "GROUP" then
@@ -154,54 +266,6 @@ function partsObject:deepCopy(part)
 	
 	-- Returns copy of modelpart
 	return copy
-	
-end
-
--- Creates a chain of modelparts based on a modelparts name.  
--- This function will search a part object's outliner for similar names with numbers, counting upwards.
----@param part ModelPart #
--- The root modelpart of the chain. It's assumed index is 1, optionally.  
--- Starting with any number other than 1 will assume the number after it.
----@param length? integer #
--- How many entries will be made into the table.  
--- If left blank, the function will add model parts until the chain is broken.
----@nodiscard
-function partsObject:createChain(part, length)
-	
-	-- The parts that match the modelpart root
-	---@type ModelPart[]
-	local tbl = {}
-	
-	-- If no length, use parts table instead
-	length = length or #self.parts
-	
-	-- Insert root modelpart into table
-	table.insert(tbl, part)
-	
-	-- Part name, string, and initial index
-	local name = part:getName()
-	local nameStr = name:gsub("%d+$", "")
-	local initIndex = name:match("%d+$") or 1
-	
-	-- Search for modelparts using name
-	for i = 2, length do
-		
-		-- Create names
-		local currIndex = initIndex + i - 1
-		local currName = nameStr..currIndex
-		local currPart = self.outliner[currName]
-		
-		-- Store part in table, otherwise kill loop
-		if currPart then
-			table.insert(tbl, currPart)
-		else
-			break
-		end
-		
-	end
-	
-	-- Return table
-	return tbl
 	
 end
 

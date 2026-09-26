@@ -9,7 +9,7 @@
 --          \|__|  \|_______|    \|__|  \|__|\|__|\|_______|
 --
 -- Special thanks: Grandpa Scout & Auria
--- Version: 1.2.0
+-- Version: 1.2.1
 
 -- An API for handling the creation of Parts Objects.
 ---@class PartsAPI
@@ -44,21 +44,28 @@ local groupMeta = {
 	---@param fieldStr string
 	__index = function(obj, fieldStr)
 		
+		--[[
+			Check if the group has modelparts.
+			Tables using this metatable will always have a modelpart; even if none were added, a dummy part was provided to the table.
+			By this point they were accidentally or deliberately removed. Either way this SHOULDN'T be happening.
+			This error exists both to help prevent Stack Overflows, and inform the user that they are trying to index a nil value.
+		]]
+		if #obj == 0 then error("attempt to index ? (a nil value) with key \'"..fieldStr.."\'\n\n(Psst! Your ModelPart group is missing ModelParts!)\n", 2) end
+		
 		-- Get the first modelpart
 		local first = obj[1]
 		
-		-- Get method from modelpart API
-		local method = partIndex(first, fieldStr)
+		-- Get field from modelpart API
+		local field = partIndex(first, fieldStr)
 		
 		-- Return field early if not a function
-		if type(method) ~= "function" then return method end
+		if type(field) ~= "function" then return field end
 		
-		-- Preform functions on modelparts
-		---@return any ...
+		-- Preform methods on modelparts
 		return function(_, ...)
 			
 			-- Preform method on first modelpart, and get results as table
-			local results = table.pack(method(first, ...))
+			local results = table.pack(field(first, ...))
 			
 			-- If the first result was the first modelpart, return object table
 			if results[1] == first then
@@ -67,7 +74,7 @@ local groupMeta = {
 			
 			-- Preform method on the rest of the modelparts
 			for i = 2, #obj do
-				method(obj[i], ...)
+				field(obj[i], ...)
 			end
 			
 			-- Return results
@@ -143,6 +150,9 @@ function partsAPI.new(model)
 	
 end
 
+-- Fake modelpart; added to groups that don't contain a modelpart
+local dummyPart = models:newPart("DummyModelPart"):remove()
+
 -- Creates a table of model parts that match a condition.  
 -- This table acts like a singular modelpart, and can have methods preformed on it.
 ---@param condition fun(part: ModelPart): any #
@@ -161,6 +171,11 @@ function partsObject:createGroup(condition)
 	-- Loop through each part checking if the condition matches
 	for i = 1, #parts do
 		if condition(parts[i]) then tbl[#tbl + 1] = parts[i] end
+	end
+	
+	-- If no modelparts are found, add the dummy modelpart to the table
+	if #tbl == 0 then
+		tbl[1] = dummyPart
 	end
 	
 	-- Establish group metatable
